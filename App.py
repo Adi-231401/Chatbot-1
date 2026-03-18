@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 from groq import Groq
 
 # ───────────────────────────────────────────────
@@ -12,20 +12,13 @@ st.set_page_config(
 )
 
 st.title("💬 Sankalp")
-st.caption("🚀 A fast & smart chatbot – powered by Groq")
+st.caption("🚀 Fast & smart AI chatbot – powered by Groq")
 
 # ───────────────────────────────────────────────
-# Sidebar – API key & model selection
+# Sidebar – model & settings
 # ───────────────────────────────────────────────
 with st.sidebar:
     st.header("⚙️ Settings")
-
-    api_key = st.text_input(
-        "Groq API Key",
-        type="password",
-        placeholder="gsk_...",
-        help="Get your key → https://console.groq.com/keys"
-    )
 
     model = st.selectbox(
         "Model",
@@ -53,6 +46,24 @@ with st.sidebar:
         st.rerun()
 
 # ───────────────────────────────────────────────
+# Get API key from Streamlit secrets
+# ───────────────────────────────────────────────
+try:
+    api_key = st.secrets["GROQ_API_KEY"]
+except KeyError:
+    st.error("GROQ_API_KEY not found in secrets.\n\nPlease add it in .streamlit/secrets.toml or in the Streamlit Cloud dashboard.")
+    st.stop()
+
+if not api_key or api_key.strip() == "":
+    st.error("GROQ_API_KEY is empty. Please set a valid key in secrets.")
+    st.stop()
+
+# ───────────────────────────────────────────────
+# Initialize Groq client
+# ───────────────────────────────────────────────
+client = Groq(api_key=api_key)
+
+# ───────────────────────────────────────────────
 # Initialize chat history
 # ───────────────────────────────────────────────
 if "messages" not in st.session_state:
@@ -74,12 +85,6 @@ for msg in st.session_state.messages:
 # ───────────────────────────────────────────────
 # Main chat input + generation
 # ───────────────────────────────────────────────
-if api_key.strip() == "":
-    st.info("👈 Please add your Groq API key in the sidebar to start chatting.")
-    st.stop()
-
-client = Groq(api_key=api_key)
-
 if prompt := st.chat_input("Talk to Sankalp..."):
     # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
@@ -88,23 +93,27 @@ if prompt := st.chat_input("Talk to Sankalp..."):
 
     # Generate streaming response
     with st.chat_message("assistant"):
-        stream = client.chat.completions.create(
-            model=model,
-            messages=st.session_state.messages,
-            temperature=temperature,
-            max_tokens=2048,
-            stream=True,
-        )
+        try:
+            stream = client.chat.completions.create(
+                model=model,
+                messages=st.session_state.messages,
+                temperature=temperature,
+                max_tokens=2048,
+                stream=True,
+            )
 
-        response_container = st.empty()
-        full_response = ""
+            response_container = st.empty()
+            full_response = ""
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                full_response += chunk.choices[0].delta.content
-                response_container.markdown(full_response + "▌")
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    full_response += chunk.choices[0].delta.content
+                    response_container.markdown(full_response + "▌")
 
-        response_container.markdown(full_response)
+            response_container.markdown(full_response)
 
-    # Save assistant reply
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
+            # Save assistant reply
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+        except Exception as e:
+            st.error(f"Error communicating with Groq: {str(e)}")           
